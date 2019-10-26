@@ -1,2 +1,2 @@
 # WalidacjaZdjec
-![alt text](Screenshot.png)
+![alt text](Screenshot.jpg)
