@@ -20,30 +20,52 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import java.io.File
 import java.util.concurrent.Executors
-import androidx.core.os.HandlerCompat.postDelayed
+import android.os.Handler
+import java.nio.ByteBuffer
+import java.util.concurrent.TimeUnit
+import android.widget.TextView
 import androidx.core.app.ComponentActivity.ExtraData
 import androidx.core.content.ContextCompat.getSystemService
 import android.icu.lang.UCharacter.GraphemeClusterBreak.T
-import android.os.Handler
-import androidx.core.os.postDelayed
-import java.nio.ByteBuffer
-import java.util.concurrent.TimeUnit
+import android.view.WindowManager
 
 
 // This is an arbitrary number we are using to keep track of the permission
 // request. Where an app has multiple context for requesting permission,
 // this can help differentiate the different contexts.
 private const val REQUEST_CODE_PERMISSIONS = 10
-
+lateinit var napis: String
+private var checked = 0
 // This is an array of all the permission specified in the manifest.
 private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
 class MainActivity : AppCompatActivity(), LifecycleOwner {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // Add this at the end of onCreate function
         setContentView(R.layout.activity_main)
         viewFinder = findViewById(R.id.view_finder)
+        lum = findViewById(R.id.lum)
+        napis = " "
+        var lumStr: String
+
+
+        val handler = Handler()
+        val r = object : Runnable {
+            override fun run() {
+                // DO WORK
+                if (checked == 0) {
+                    lumStr = "Średnia jasność obrazu: $napis"
+                    Log.d("CameraXApp", lumStr)
+                    lum.text = lumStr
+                    checked = 1
+                }
+                // Call function.
+                handler.postDelayed(this, 10)
+            }
+        }
+        r.run()
 
         // Request camera permissions
         if (allPermissionsGranted()) {
@@ -59,17 +81,19 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
         }
 
     }
+
     // Add this after onCreate
 
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var viewFinder: TextureView
+    private lateinit var lum: TextView
     private fun startCamera() {
         // TODO: Implement CameraX operations
         // Create configuration object for the viewfinder use case
         val previewConfig = PreviewConfig.Builder().apply {
             setTargetResolution(Size(640, 480))
+            setLensFacing(CameraX.LensFacing.BACK)
         }.build()
-
 
         // Build the viewfinder use case
         val preview = Preview(previewConfig)
@@ -190,7 +214,8 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
             val currentTimestamp = System.currentTimeMillis()
             // Calculate the average luma no more often than every second
             if (currentTimestamp - lastAnalyzedTimestamp >=
-                TimeUnit.SECONDS.toMillis(1)) {
+                //TimeUnit.SECONDS.toMillis(1)) {
+                50){
                 // Since format in ImageAnalysis is YUV, image.planes[0]
                 // contains the Y (luminance) plane
                 val buffer = image.planes[0].buffer
@@ -202,6 +227,8 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
                 val luma = pixels.average()
                 // Log the new luma value
                 Log.d("CameraXApp", "Average luminosity: $luma")
+                napis = "%.2f".format(luma)
+                checked = 0
                 // Update timestamp of last analyzed frame
                 lastAnalyzedTimestamp = currentTimestamp
             }
