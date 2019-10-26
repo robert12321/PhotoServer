@@ -1,1 +1,1 @@
-# PhotoServer
+# WalidacjaZdjec

@@ -90,10 +90,11 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
     private fun startCamera() {
         // TODO: Implement CameraX operations
         CameraX.unbindAll()
+        val lensFacing = CameraX.LensFacing.BACK // FRONT
         // Create configuration object for the viewfinder use case
         val previewConfig = PreviewConfig.Builder().apply {
             setTargetResolution(Size(640, 480))
-            setLensFacing(CameraX.LensFacing.FRONT)
+            setLensFacing(lensFacing)
             setTargetRotation(windowManager.defaultDisplay.rotation)
         }.build()
 
@@ -121,7 +122,7 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
                 // select a capture mode which will infer the appropriate
                 // resolution based on aspect ration and requested mode
                 setCaptureMode(ImageCapture.CaptureMode.MIN_LATENCY)
-                setLensFacing(CameraX.LensFacing.FRONT)
+                setLensFacing(lensFacing)
             }.build()
 
         // Build the image capture use case and attach button click listener
@@ -160,7 +161,7 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
         val analyzerConfig = ImageAnalysisConfig.Builder().apply {
             // In our analysis, we care more about the latest image than
             // analyzing *every* image
-            setLensFacing(CameraX.LensFacing.FRONT)
+            setLensFacing(lensFacing)
             setImageReaderMode(
                 ImageAnalysis.ImageReaderMode.ACQUIRE_LATEST_IMAGE)
         }.build()
