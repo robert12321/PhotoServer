@@ -6,14 +6,13 @@ import android.os.Bundle
 // different implementations so we list them here to disambiguate.
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.ImageFormat
 import android.util.Size
 import android.graphics.Matrix
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
 import android.view.ViewGroup
-import android.widget.ImageButton
-import android.widget.Toast
 import androidx.camera.core.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -22,12 +21,12 @@ import java.io.File
 import java.util.concurrent.Executors
 import android.os.Handler
 import java.nio.ByteBuffer
-import java.util.concurrent.TimeUnit
-import android.widget.TextView
-import androidx.core.app.ComponentActivity.ExtraData
-import androidx.core.content.ContextCompat.getSystemService
-import android.icu.lang.UCharacter.GraphemeClusterBreak.T
 import android.view.WindowManager
+import android.widget.*
+import android.hardware.camera2.CameraAccessException
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.params.StreamConfigurationMap
 
 
 // This is an arbitrary number we are using to keep track of the permission
@@ -46,11 +45,24 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
         // Add this at the end of onCreate function
         setContentView(R.layout.activity_main)
         viewFinder = findViewById(R.id.view_finder)
+
+        var lensFacing = CameraX.LensFacing.FRONT
+        // Request camera permissions
+        if (allPermissionsGranted()) {
+            viewFinder.post { startCamera(lensFacing) }
+        } else {
+            ActivityCompat.requestPermissions(
+                this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+        }
+
+        // Every time the provided texture view changes, recompute layout
+        viewFinder.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateTransform()
+        }
+
         lum = findViewById(R.id.lum)
         napis = " "
         var lumStr: String
-
-
         val handler = Handler()
         val r = object : Runnable {
             override fun run() {
@@ -67,33 +79,114 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
         }
         r.run()
 
-        // Request camera permissions
-        if (allPermissionsGranted()) {
-            viewFinder.post { startCamera() }
-        } else {
-            ActivityCompat.requestPermissions(
-                this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+        checkCameraProperties()
+        aparat = findViewById(R.id.aparat)
+        if (lensFacing == CameraX.LensFacing.BACK) {
+            aparat.text = "Tylni"
+            if (backOK == 0)
+                aparat.text = "Tylni - Zła jakość"
+        }
+        else {
+            aparat.text = "Przedni"
+            if (frontOK == 0)
+                aparat.text = "Przedni - Zła jakość"
         }
 
-        // Every time the provided texture view changes, recompute layout
-        viewFinder.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            updateTransform()
+        aparat.setOnCheckedChangeListener{ _, b: Boolean ->
+            if (b){
+                aparat.text = "Tylni"
+                startCamera(CameraX.LensFacing.BACK)
+                if (backOK == 0)
+                    aparat.text = "Tylni - Zła jakość"
+            }
+            else {
+                aparat.text = "Przedni"
+                startCamera(CameraX.LensFacing.FRONT)
+                if (frontOK == 0)
+                    aparat.text = "Przedni - Zła jakość"
+            }
         }
+
+
+
 
     }
 
-    // Add this after onCreate
+    private fun checkCameraProperties(){
+        var manager = getSystemService(CAMERA_SERVICE) as CameraManager
+        try {
 
+            for (cameraId in manager.cameraIdList) {
+                var chars = manager.getCameraCharacteristics(cameraId)
+                // Do something with the characteristics
+                var map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) as StreamConfigurationMap
+                //var formats = map.outputFormats
+                var max = 0
+                var maxH = 0
+                var maxW = 0
+                var maxFormat = 0
+                var maxSizeIdx = 0
+                var format = ImageFormat.JPEG
+                var sizes = map.getOutputSizes(format)
+                var i = 0
+                for (size in sizes) {
+                    Log.i("Characteristics", "Resolution: " + size.width + "x" + size.height)
+                    if (max < size.height * size.width) {
+                        maxH = size.height
+                        maxW = size.width
+                        maxFormat = format
+                        maxSizeIdx = i
+                        max = size.height * size.width
+                    }
+                    i++
+                }
+
+                Log.i("Characteristics", "Format: $maxFormat")
+                Log.i("Characteristics", "SizeIdx: $maxSizeIdx")
+                Log.i("Characteristics", "MaxResolution: $maxW" + "x" + "$maxH")
+
+                if ( chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK ) {
+                    Log.i("Characteristics", "Lens Facing Back")
+                    if (maxW * maxH < 4*1000000){
+                        Log.i("Characteristics", "Too low resolution")
+                        backOK = 0
+                    }
+                    else
+                        backOK = 1
+
+                }
+                if ( chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT ) {
+                    Log.i("Characteristics", "Lens Facing Front")
+                    if (maxW * maxH < 4*1000000){
+                        Log.i("Characteristics", "Too low resolution")
+                        frontOK = 0
+                    }
+                    else
+                        frontOK = 1
+                }
+            }
+
+        }
+        catch (e: CameraAccessException) {
+            Log.e("Camera", "CameraAccessException")
+            e.printStackTrace()
+        }
+    }
+
+    // Add this after onCreate
+    private var frontOK = 0
+    private var backOK = 0
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var viewFinder: TextureView
     private lateinit var lum: TextView
-    private fun startCamera() {
+    private  lateinit var aparat: Switch
+    private fun startCamera(lensFacing: CameraX.LensFacing) {
         // TODO: Implement CameraX operations
         CameraX.unbindAll()
-        val lensFacing = CameraX.LensFacing.BACK // FRONT
+        //val lensFacing = CameraX.LensFacing.BACK // FRONT
         // Create configuration object for the viewfinder use case
         val previewConfig = PreviewConfig.Builder().apply {
-            setTargetResolution(Size(640, 480))
+            setTargetResolution(Size(694, 483))
             setLensFacing(lensFacing)
             setTargetRotation(windowManager.defaultDisplay.rotation)
         }.build()
@@ -124,7 +217,6 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
                 setCaptureMode(ImageCapture.CaptureMode.MIN_LATENCY)
                 setLensFacing(lensFacing)
             }.build()
-
         // Build the image capture use case and attach button click listener
         val imageCapture = ImageCapture(imageCaptureConfig)
         findViewById<ImageButton>(R.id.capture_button).setOnClickListener {
@@ -250,7 +342,7 @@ class MainActivity : AppCompatActivity(), LifecycleOwner {
         requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
-                viewFinder.post { startCamera() }
+                viewFinder.post { startCamera(CameraX.LensFacing.FRONT) }
             } else {
                 Toast.makeText(this,
                     "Permissions not granted by the user.",
